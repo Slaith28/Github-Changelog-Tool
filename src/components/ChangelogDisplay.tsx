@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { toPlainText } from "@/lib/changelog";
 
 interface ChangelogDisplayProps {
@@ -29,10 +32,7 @@ export default function ChangelogDisplay({ changelog, repoUrl }: ChangelogDispla
   };
 
   const handleDownloadMd = () => download(changelog, "CHANGELOG.md", "text/markdown");
-
-  const handleDownloadTxt = () =>
-    download(toPlainText(changelog), "CHANGELOG.txt", "text/plain");
-
+  const handleDownloadTxt = () => download(toPlainText(changelog), "CHANGELOG.txt", "text/plain");
   const handleDownloadJson = () => {
     const payload = JSON.stringify(
       { repo: repoUrl, generatedAt: new Date().toISOString(), changelog },
@@ -43,55 +43,46 @@ export default function ChangelogDisplay({ changelog, repoUrl }: ChangelogDispla
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-lg font-semibold">Generated Changelog</h2>
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={handleCopy}
-            className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            {copied ? "Copied!" : "Copy"}
-          </button>
-          <button
-            onClick={handleDownloadMd}
-            className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            .md
-          </button>
-          <button
-            onClick={handleDownloadTxt}
-            className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            .txt
-          </button>
-          <button
-            onClick={handleDownloadJson}
-            className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            .json
-          </button>
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <CardTitle>Generated Changelog</CardTitle>
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={handleCopy}>
+              {copied ? "Copied!" : "Copy"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleDownloadMd}>
+              .md
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleDownloadTxt}>
+              .txt
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleDownloadJson}>
+              .json
+            </Button>
+          </div>
         </div>
-      </div>
+        <Separator />
+      </CardHeader>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-lg p-6 text-sm text-gray-200 leading-relaxed">
+      <CardContent className="text-sm leading-relaxed">
         <ReactMarkdown
           components={{
             h1: ({ children }) => (
-              <h1 className="text-2xl font-bold mt-6 mb-3 text-white">{children}</h1>
+              <h1 className="text-2xl font-bold mt-6 mb-3 text-foreground">{children}</h1>
             ),
             h2: ({ children }) => (
-              <h2 className="text-xl font-semibold mt-5 mb-2 text-white">{children}</h2>
+              <h2 className="text-xl font-semibold mt-5 mb-2 text-foreground">{children}</h2>
             ),
             h3: ({ children }) => (
-              <h3 className="text-base font-semibold mt-4 mb-1 text-gray-100">{children}</h3>
+              <h3 className="text-base font-semibold mt-4 mb-1 text-foreground">{children}</h3>
             ),
             a: ({ href, children }) => (
               <a
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:underline"
+                className="text-primary hover:underline"
               >
                 {children}
               </a>
@@ -99,21 +90,21 @@ export default function ChangelogDisplay({ changelog, repoUrl }: ChangelogDispla
             ul: ({ children }) => (
               <ul className="list-disc pl-5 space-y-1 my-2">{children}</ul>
             ),
-            li: ({ children }) => <li className="text-gray-300">{children}</li>,
-            p: ({ children }) => <p className="my-2 text-gray-300">{children}</p>,
+            li: ({ children }) => <li className="text-muted-foreground">{children}</li>,
+            p: ({ children }) => <p className="my-2 text-muted-foreground">{children}</p>,
             strong: ({ children }) => (
-              <strong className="font-semibold text-white">{children}</strong>
+              <strong className="font-semibold text-foreground">{children}</strong>
             ),
-            hr: () => <hr className="border-gray-700 my-4" />,
+            hr: () => <Separator className="my-4" />,
           }}
         >
           {changelog}
         </ReactMarkdown>
-      </div>
 
-      <p className="text-xs text-gray-600 text-right">
-        Generated by Gemini 2.5 Flash (Google AI)
-      </p>
-    </div>
+        <p className="text-xs text-muted-foreground/50 text-right mt-4">
+          Generated by Gemini 2.5 Flash (Google AI)
+        </p>
+      </CardContent>
+    </Card>
   );
 }
