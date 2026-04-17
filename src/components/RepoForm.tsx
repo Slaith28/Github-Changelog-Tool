@@ -22,7 +22,7 @@ export default function RepoForm({ onSubmit, loading }: RepoFormProps) {
           htmlFor="repo-url"
           className="block text-sm font-medium text-gray-400 mb-2"
         >
-          GitHub Repository URL
+          Public Repository URL
         </label>
         <input
           id="repo-url"

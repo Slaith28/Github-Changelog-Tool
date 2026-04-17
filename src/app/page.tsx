@@ -1,34 +1,42 @@
-import { SignInButton, SignedIn, SignedOut } from "@clerk/nextjs";
-import Link from "next/link";
+import { currentUser } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import { SignInButton } from "@clerk/nextjs";
+import AboutBox from "@/components/AboutBox";
 
-export default function Home() {
+export default async function Home() {
+  const user = await currentUser();
+  if (user) redirect("/dashboard");
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-gray-950 text-white px-4">
-      <div className="max-w-2xl w-full text-center space-y-6">
-        <h1 className="text-5xl font-bold tracking-tight">
-          GitHub Changelog Tool
-        </h1>
-        <p className="text-xl text-gray-400">
-          Paste a GitHub repo URL and get a clean, AI-generated changelog from
-          its commit history.
-        </p>
+    <main className="min-h-screen flex flex-col items-center justify-center bg-gray-950 text-white px-4 py-16 relative">
+      <div className="max-w-xl w-full flex flex-col items-center gap-8">
 
-        <SignedOut>
-          <SignInButton mode="modal">
-            <button className="bg-white text-black px-8 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors">
-              Sign in to get started
-            </button>
-          </SignInButton>
-        </SignedOut>
+        {/* title */}
+        <div className="text-center space-y-3">
+          <h1 className="text-5xl font-bold tracking-tight">
+            GitHub Changelog Tool
+          </h1>
+          <p className="text-gray-400 text-lg">
+            AI-powered changelogs from your commit history.
+          </p>
+        </div>
 
-        <SignedIn>
-          <Link href="/dashboard">
-            <button className="bg-white text-black px-8 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors">
-              Go to Dashboard
-            </button>
-          </Link>
-        </SignedIn>
+        {/* about box */}
+        <AboutBox />
+
+        {/* sign in */}
+        <SignInButton mode="modal">
+          <button className="bg-white text-black px-8 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors w-full">
+            Sign in with GitHub
+          </button>
+        </SignInButton>
+
       </div>
+
+      <p className="absolute bottom-6 text-xs text-gray-600">
+        Developed by Laith Shakir
+      </p>
     </main>
   );
 }
+
