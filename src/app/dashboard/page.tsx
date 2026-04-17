@@ -3,10 +3,13 @@
 import { useState, useEffect } from "react";
 import { useUser, SignOutButton } from "@clerk/nextjs";
 import Image from "next/image";
+import { GitBranch } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import RepoList from "@/components/RepoList";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import ChangelogDisplay from "@/components/ChangelogDisplay";
-import AboutBox from "@/components/AboutBox";
 
 interface Repo {
   id: number;
@@ -66,9 +69,13 @@ export default function Dashboard() {
   const githubUsername = githubAccount?.username ?? user?.username;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <header className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">GitHub Changelog Tool</h1>
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Header */}
+      <header className="border-b border-border px-6 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-primary">
+          <GitBranch className="w-5 h-5" />
+          <span className="font-semibold text-foreground">GitHub Changelog Tool</span>
+        </div>
 
         {user && (
           <div className="flex items-center gap-3">
@@ -82,54 +89,82 @@ export default function Dashboard() {
               />
             )}
             {githubUsername && (
-              <span className="text-sm text-gray-300">{githubUsername}</span>
+              <span className="text-sm text-muted-foreground">{githubUsername}</span>
             )}
             <SignOutButton redirectUrl="/">
-              <button className="text-sm text-gray-400 hover:text-white transition-colors">
+              <Button variant="ghost" size="sm">
                 Sign out
-              </button>
+              </Button>
             </SignOutButton>
           </div>
         )}
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-10 space-y-10">
-        <AboutBox />
-
-        {/* date range filter */}
-        <section className="space-y-3">
-          <div>
-            <h2 className="text-sm font-medium text-gray-300 uppercase tracking-wide">
-              Filter by Date Range
-            </h2>
-            <p className="text-xs text-gray-500 mt-1">
-              Only commits within this range will be included in the generated changelog.
+      <main className="max-w-4xl mx-auto px-6 py-10 space-y-6">
+        {/* About */}
+        <Card>
+          <CardContent className="pt-6 space-y-4 text-sm text-muted-foreground leading-relaxed">
+            <p className="text-foreground">
+              Generate a structured changelog from the commit history of any of your
+              repositories. Commits are grouped by release version (if tags exist) or
+              by date, categorized by type, and each entry includes the commit author
+              and a direct link to the diff.
             </p>
-          </div>
-          <DateRangeFilter onChange={setDateRange} />
-          <p className="text-xs text-gray-600">
-            ⚠️ Limited to 50 commits per request with descriptions capped at 500 characters — free tier API limits.
-          </p>
-        </section>
+            <Separator />
+            <div className="space-y-1 text-xs">
+              <p>⚠️ Org repos may not appear without third-party OAuth access from your org.</p>
+              <p>⚠️ Currently limited to commits on the default branch (main/master).</p>
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* user's repos */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Your Repositories</h2>
-          <RepoList
-            repos={repos}
-            loading={reposLoading}
-            generating={generating}
-            activeRepo={activeRepo}
-            onGenerate={generateChangelog}
-          />
-        </section>
+        {/* Date Range Filter */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium uppercase tracking-wide">
+              Filter by Date Range
+            </CardTitle>
+            <CardDescription>
+              Only commits within this range will be included in the generated changelog.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <DateRangeFilter onChange={setDateRange} />
+            <p className="text-xs text-muted-foreground/60">
+              ⚠️ Limited to 50 commits per request with descriptions capped at 500 characters — free tier API limits.
+            </p>
+          </CardContent>
+        </Card>
 
+        {/* Repository List */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle>Your Repositories</CardTitle>
+            <CardDescription>
+              Select a repository to generate its changelog.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RepoList
+              repos={repos}
+              loading={reposLoading}
+              generating={generating}
+              activeRepo={activeRepo}
+              onGenerate={generateChangelog}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Error */}
         {error && (
-          <div className="bg-red-900/40 border border-red-700 rounded-lg p-4 text-red-300 text-sm">
-            {error}
-          </div>
+          <Card className="border-destructive">
+            <CardContent className="pt-6 text-sm text-destructive">
+              {error}
+            </CardContent>
+          </Card>
         )}
 
+        {/* Changelog Output */}
         {changelog && (
           <ChangelogDisplay changelog={changelog} repoUrl={activeRepo} />
         )}
