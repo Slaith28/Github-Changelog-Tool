@@ -10,14 +10,27 @@ export function parseRepoUrl(url: string): { owner: string; repo: string } | nul
   }
 }
 
-// map commit title prefix to an emoji severity indicator
 export function classify(title: string): string {
   if (/breaking.change|BREAKING CHANGE|\bremov(e[sd]?|ing)\b|\bdeprecat/i.test(title)) return "🔴";
   if (/^(feat|add|implement|new|feature)(\(|:|!|\s)/i.test(title)) return "🟢";
   if (/^(fix|bug|resolve|patch|hotfix)(\(|:|!|\s)/i.test(title)) return "🔵";
+  if (/\b(security|vuln(erability)?|cve|xss|csrf)\b/i.test(title)) return "🔒";
+  if (/^(perf|optim|performance)(\(|:|!|\s)/i.test(title)) return "⚡";
   if (/^(docs?|documentation|readme)(\(|:|!|\s)/i.test(title)) return "📄";
   return "⚪";
 }
+
+export const CATEGORY_ORDER = ["🔴", "🟢", "🔵", "🔒", "⚡", "📄", "⚪"] as const;
+
+export const CATEGORY_LABELS: Record<string, string> = {
+  "🔴": "Breaking Changes",
+  "🟢": "Features",
+  "🔵": "Bug Fixes",
+  "🔒": "Security",
+  "⚡": "Performance",
+  "📄": "Documentation",
+  "⚪": "Maintenance",
+};
 
 // strip markdown syntax for plain text export
 export function toPlainText(md: string): string {

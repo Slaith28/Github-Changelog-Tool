@@ -1,7 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
-import { parseRepoUrl, classify, formatCommitEntry } from "@/lib/changelog";
+import { parseRepoUrl, classify, CATEGORY_ORDER, CATEGORY_LABELS } from "@/lib/changelog";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -91,6 +91,127 @@ async function fetchCommits(
   });
 }
 
+function formatMonthLabel(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+}
+
+function formatDayLabel(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+function renderDayGroups(commits: Commit[], commitUrl: (sha: string) => string): string {
+  const dayMap = new Map<string, Commit[]>();
+  for (const c of commits) {
+    if (!dayMap.has(c.date)) dayMap.set(c.date, []);
+    dayMap.get(c.date)!.push(c);
+  }
+
+  return [...dayMap.entries()]
+    .map(([dayKey, dayCommits]) => {
+      const header = `### ${formatDayLabel(dayKey)}`;
+      const entries = dayCommits
+        .map(c => {
+          const line = `${c.emoji} [${c.sha}](${commitUrl(c.sha)}) (@${c.author}) ${c.title}`;
+          return c.body ? `${line}\n  ${c.body.replace(/\n/g, "\n  ")}` : line;
+        })
+        .join("\n");
+      return `${header}\n\n${entries}`;
+    })
+    .join("\n\n");
+}
+
+function buildStructuredInput(commits: Commit[], tags: Tag[], commitUrl: (sha: string) => string): string {
+  if (tags.length > 0) {
+    const tagPositions = tags
+      .map(t => ({ ...t, idx: commits.findIndex(c => c.sha === t.sha) }))
+      .filter(t => t.idx !== -1)
+      .sort((a, b) => a.idx - b.idx);
+
+    if (tagPositions.length === 0) return buildStructuredInput(commits, [], commitUrl);
+
+    const groups: { label: string; commits: Commit[] }[] = [];
+
+    if (tagPositions[0].idx > 0) {
+      groups.push({ label: "Unreleased", commits: commits.slice(0, tagPositions[0].idx) });
+    }
+
+    for (let i = 0; i < tagPositions.length; i++) {
+      const start = tagPositions[i].idx;
+      const end = tagPositions[i + 1]?.idx ?? commits.length;
+      groups.push({ label: tagPositions[i].name, commits: commits.slice(start, end) });
+    }
+
+    return groups
+      .filter(g => g.commits.length > 0)
+      .map((g, i) => {
+        const header = `## ${g.label}`;
+        const body = renderDayGroups(g.commits, commitUrl);
+        return i > 0 ? `---\n\n${header}\n\n${body}` : `${header}\n\n${body}`;
+      })
+      .join("\n\n");
+  }
+
+  // No tags — group by month then day
+  const monthMap = new Map<string, Commit[]>();
+  for (const c of commits) {
+    const key = c.date.slice(0, 7);
+    if (!monthMap.has(key)) monthMap.set(key, []);
+    monthMap.get(key)!.push(c);
+  }
+
+  return [...monthMap.entries()]
+    .map(([monthKey, monthCommits]) =>
+      `## ${formatMonthLabel(monthKey)}\n\n${renderDayGroups(monthCommits, commitUrl)}`
+    )
+    .join("\n\n");
+}
+
+function buildPrompt(owner: string, repo: string, structuredInput: string): string {
+  const categoryBlock = CATEGORY_ORDER
+    .map(emoji => `   #### ${emoji} ${CATEGORY_LABELS[emoji]}`)
+    .join("\n");
+
+  return `You are a technical writer generating a CHANGELOG.md for "${owner}/${repo}".
+
+The commit history below is already organized by date (and release tag where applicable). Your only job is to rewrite each commit into a clear, human-readable sentence and group them by category within each day section.
+
+COMMIT DATA:
+${structuredInput}
+
+OUTPUT FORMAT RULES:
+1. Preserve every ## and ### header exactly as given — do not add, remove, or rename them.
+2. Within each ### day section, group commits under #### category headers in this exact order (omit categories with no entries):
+${categoryBlock}
+3. Each entry format: - Human-readable description ([sha](url)) (@username)
+   - Copy the [sha](url) link and (@username) handle verbatim from the input.
+   - Write the description from scratch — do not copy the raw commit message verbatim.
+   - If a commit has an indented body beneath its title, use it to write a more specific description. Keep it to one concise sentence — enough detail to be useful, not a full paragraph.
+   - If there is no body and the title is vague, write the best description you can from context alone.
+4. Output only the Markdown. No preamble, no explanation, no code fences.
+
+EXAMPLE:
+Input:
+## v1.0.0
+
+### April 15, 2026
+
+🟢 [abc1234](https://github.com/x/y/commit/abc1234) (@laith) feat: add dark mode toggle
+🔵 [def5678](https://github.com/x/y/commit/def5678) (@laith) fix: login redirect loop on sign-out
+
+Output:
+## v1.0.0
+
+### April 15, 2026
+
+#### 🟢 Features
+- Added a dark mode toggle to the dashboard settings ([abc1234](https://github.com/x/y/commit/abc1234)) (@laith)
+
+#### 🔵 Bug Fixes
+- Fixed an infinite redirect loop that occurred when signing out ([def5678](https://github.com/x/y/commit/def5678)) (@laith)`;
+}
+
 export async function POST(req: NextRequest) {
   const { userId } = auth();
   if (!userId) {
@@ -156,53 +277,45 @@ export async function POST(req: NextRequest) {
   }
 
   const commitUrl = (sha: string) => `https://github.com/${owner}/${repo}/commit/${sha}`;
+  const structuredInput = buildStructuredInput(commits, tags, commitUrl);
+  const prompt = buildPrompt(owner, repo, structuredInput);
 
-  const commitList = commits
-    .map((c) => formatCommitEntry(c.emoji, c.sha, commitUrl(c.sha), c.date, c.author, c.title, c.body))
-    .join("\n");
-
-  const tagSection =
-    tags.length > 0
-      ? `Version tags (group commits into these releases):\n${tags.map((t) => `- ${t.name} → commit ${t.sha}`).join("\n")}\n\n`
-      : "No version tags found — group commits by month instead.\n\n";
-
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-  let result;
+  // Try Gemini first, fall back to Groq on any failure
   try {
-    result = await model.generateContent(
-      `You are a technical writer generating a CHANGELOG.md for "${owner}/${repo}".
-
-${tagSection}Commits (newest first):
-${commitList}
-
-Instructions:
-- If version tags are provided, group commits under each release (## v1.2.0). Otherwise group by month (## March 2024).
-- Within each group, sub-group by emoji: 🔴 Breaking Changes, 🟢 Features, 🔵 Bug Fixes, 📄 Documentation, ⚪ Maintenance — only include categories that have entries.
-- Each entry format: "- Description ([sha](url)) (@username)" — preserve the commit links exactly as given.
-- Write human-readable descriptions, don't copy commit messages verbatim.
-- Output only the Markdown, no preamble or explanation.`
-    );
-  } catch (err: unknown) {
-    const status = (err as { status?: number }).status;
-    if (status === 503) {
-      return NextResponse.json(
-        { error: "The AI service is temporarily unavailable due to high demand. Please try again in a moment." },
-        { status: 503 }
-      );
-    }
-    if (status === 429) {
-      return NextResponse.json(
-        { error: "AI quota exceeded. Please wait a moment and try again." },
-        { status: 429 }
-      );
-    }
-    return NextResponse.json(
-      { error: "Failed to generate changelog. Please try again." },
-      { status: 500 }
-    );
+    const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const result = await geminiModel.generateContent(prompt);
+    return NextResponse.json({ changelog: result.response.text(), model: "gemini" });
+  } catch {
+    // Gemini failed — attempt Groq fallback
   }
 
-  const changelog = result.response.text();
-  return NextResponse.json({ changelog });
+  try {
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+      }),
+    });
+
+    if (!groqRes.ok) {
+      const errBody = await groqRes.json().catch(() => ({}));
+      const message = (errBody as { error?: { message?: string } }).error?.message;
+      throw new Error(message ?? `Groq API error: ${groqRes.status}`);
+    }
+
+    const groqData = await groqRes.json() as {
+      choices: Array<{ message: { content: string } }>;
+    };
+    const changelog = groqData.choices[0]?.message?.content ?? "";
+    return NextResponse.json({ changelog, model: "groq" });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to generate changelog.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
