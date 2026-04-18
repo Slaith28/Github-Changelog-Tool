@@ -108,7 +108,7 @@ function renderDayGroups(commits: Commit[], commitUrl: (sha: string) => string):
     dayMap.get(c.date)!.push(c);
   }
 
-  return [...dayMap.entries()]
+  return Array.from(dayMap.entries())
     .map(([dayKey, dayCommits]) => {
       const header = `### ${formatDayLabel(dayKey)}`;
       const entries = dayCommits
@@ -161,7 +161,7 @@ function buildStructuredInput(commits: Commit[], tags: Tag[], commitUrl: (sha: s
     monthMap.get(key)!.push(c);
   }
 
-  return [...monthMap.entries()]
+  return Array.from(monthMap.entries())
     .map(([monthKey, monthCommits]) =>
       `## ${formatMonthLabel(monthKey)}\n\n${renderDayGroups(monthCommits, commitUrl)}`
     )
