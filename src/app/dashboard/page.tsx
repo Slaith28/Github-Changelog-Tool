@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useUser, SignOutButton } from "@clerk/nextjs";
 import Image from "next/image";
 import { GitBranch } from "lucide-react";
@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import RepoList from "@/components/RepoList";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import ChangelogDisplay from "@/components/ChangelogDisplay";
+import { Progress } from "@/components/ui/progress";
 
 interface Repo {
   id: number;
@@ -31,9 +32,12 @@ export default function Dashboard() {
   const [reposLoading, setReposLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange>({});
   const [changelog, setChangelog] = useState("");
+  const [changelogModel, setChangelogModel] = useState<"gemini" | "groq" | undefined>();
   const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [activeRepo, setActiveRepo] = useState("");
   const [error, setError] = useState("");
+  const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     fetch("/api/repos")
@@ -47,7 +51,14 @@ export default function Dashboard() {
     setGenerating(true);
     setError("");
     setChangelog("");
+    setChangelogModel(undefined);
     setActiveRepo(repoUrl);
+
+    // Simulate progress: asymptotically approach 90%, then jump to 100% on completion
+    setProgress(0);
+    progressInterval.current = setInterval(() => {
+      setProgress((p) => p + (90 - p) * 0.06);
+    }, 200);
 
     try {
       const res = await fetch("/api/generate-changelog", {
@@ -58,10 +69,16 @@ export default function Dashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate changelog");
       setChangelog(data.changelog);
+      setChangelogModel(data.model);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
-      setGenerating(false);
+      if (progressInterval.current) clearInterval(progressInterval.current);
+      setProgress(100);
+      setTimeout(() => {
+        setGenerating(false);
+        setProgress(0);
+      }, 400);
     }
   };
 
@@ -114,6 +131,7 @@ export default function Dashboard() {
             <div className="space-y-1 text-xs">
               <p>⚠️ Org repos may not appear without third-party OAuth access from your org.</p>
               <p>⚠️ Currently limited to commits on the default branch (main/master).</p>
+              <p>⚠️ This tool runs on free-tier AI API keys. Please be mindful of how often you generate — if you encounter errors, it is likely due to rate limits or quota being exhausted.</p>
             </div>
           </CardContent>
         </Card>
@@ -130,9 +148,6 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="space-y-3">
             <DateRangeFilter onChange={setDateRange} />
-            <p className="text-xs text-muted-foreground/60">
-              ⚠️ Limited to 50 commits per request with descriptions capped at 500 characters — free tier API limits.
-            </p>
           </CardContent>
         </Card>
 
@@ -155,6 +170,14 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* Progress bar */}
+        {generating && (
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">Generating changelog…</p>
+            <Progress value={progress} />
+          </div>
+        )}
+
         {/* Error */}
         {error && (
           <Card className="border-destructive">
@@ -166,7 +189,7 @@ export default function Dashboard() {
 
         {/* Changelog Output */}
         {changelog && (
-          <ChangelogDisplay changelog={changelog} repoUrl={activeRepo} />
+          <ChangelogDisplay changelog={changelog} repoUrl={activeRepo} model={changelogModel} />
         )}
       </main>
     </div>

@@ -120,6 +120,36 @@ describe("classify", () => {
     expect(classify("documentation improve onboarding guide")).toBe("📄");
   });
 
+  // 🔒 Security
+  it("detects 'security:' as security", () => {
+    expect(classify("security: patch XSS vulnerability in markdown renderer")).toBe("🔒");
+  });
+
+  it("detects 'vuln' keyword as security", () => {
+    expect(classify("vuln in auth token parsing")).toBe("🔒");
+  });
+
+  it("detects 'cve' keyword as security", () => {
+    expect(classify("CVE-2025-1234 in dependency")).toBe("🔒");
+  });
+
+  it("detects 'xss' keyword as security", () => {
+    expect(classify("prevent XSS in user input fields")).toBe("🔒");
+  });
+
+  // ⚡ Performance
+  it("detects 'perf:' as performance", () => {
+    expect(classify("perf: reduce database query count on dashboard load")).toBe("⚡");
+  });
+
+  it("detects 'perf(scope):' as performance", () => {
+    expect(classify("perf(api): cache expensive user lookups")).toBe("⚡");
+  });
+
+  it("detects 'optim ' as performance", () => {
+    expect(classify("optim: reduce bundle size by 30%")).toBe("⚡");
+  });
+
   // ⚪ Maintenance / chores
   it("classifies 'chore:' as maintenance", () => {
     expect(classify("chore: bump dependency versions")).toBe("⚪");
