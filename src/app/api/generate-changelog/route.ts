@@ -7,11 +7,13 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 interface Commit {
   sha: string;
+  fullSha: string;
   title: string;
   body: string;
   date: string;
   author: string;
   emoji: string;
+  files?: string;
 }
 
 interface Tag {
@@ -81,6 +83,7 @@ async function fetchCommits(
 
     return {
       sha: c.sha.slice(0, 7),
+      fullSha: c.sha,
       title,
       // cap descriptions at 500 chars to keep token usage reasonable
       body: body.length > 500 ? body.slice(0, 500) + "…" : body,
@@ -89,6 +92,31 @@ async function fetchCommits(
       emoji: classify(title),
     };
   });
+}
+
+async function fetchCommitFiles(
+  owner: string,
+  repo: string,
+  sha: string,
+  headers: Record<string, string>
+): Promise<string> {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/commits/${sha}`,
+      { headers }
+    );
+    if (!res.ok) return "";
+    const data = await res.json();
+    if (!Array.isArray(data.files) || data.files.length === 0) return "";
+    return data.files
+      .slice(0, 8)
+      .map((f: { filename: string; status: string; additions: number; deletions: number }) =>
+        `${f.filename} (${f.status} +${f.additions}/-${f.deletions})`
+      )
+      .join(", ");
+  } catch {
+    return "";
+  }
 }
 
 function formatMonthLabel(key: string): string {
@@ -114,7 +142,9 @@ function renderDayGroups(commits: Commit[], commitUrl: (sha: string) => string):
       const entries = dayCommits
         .map(c => {
           const line = `${c.emoji} [${c.sha}](${commitUrl(c.sha)}) (@${c.author}) ${c.title}`;
-          return c.body ? `${line}\n  ${c.body.replace(/\n/g, "\n  ")}` : line;
+          let entry = c.body ? `${line}\n  ${c.body.replace(/\n/g, "\n  ")}` : line;
+          if (c.files) entry += `\n  Changed: ${c.files}`;
+          return entry;
         })
         .join("\n");
       return `${header}\n\n${entries}`;
@@ -188,7 +218,10 @@ ${categoryBlock}
    - Copy the [sha](url) link and (@username) handle verbatim from the input.
    - Write the description from scratch — do not copy the raw commit message verbatim.
    - If a commit has an indented body beneath its title, use it to write a more specific description. Keep it to one concise sentence — enough detail to be useful, not a full paragraph.
-   - If there is no body and the title is vague, write the best description you can from context alone.
+   - If a "Changed:" line lists files, use the filenames to write a grounded description — they reveal what was actually modified even when the title is vague.
+   - If the title is vague but files are present, infer what changed from the file paths (e.g. auth/session.ts → session handling, components/Button.tsx → UI button).
+   - The emoji shown before each commit is a suggested category based on keywords. Override it if the commit title, body, or changed files clearly indicate a different category.
+   - Exception: commits whose title begins with "Merge" or "Merged pull request" must always stay in ⚪ Maintenance — never reclassify them.
 4. Output only the Markdown. No preamble, no explanation, no code fences.
 
 EXAMPLE:
@@ -198,7 +231,9 @@ Input:
 ### April 15, 2026
 
 🟢 [abc1234](https://github.com/x/y/commit/abc1234) (@laith) feat: add dark mode toggle
-🔵 [def5678](https://github.com/x/y/commit/def5678) (@laith) fix: login redirect loop on sign-out
+  Changed: components/ThemeToggle.tsx (added +45/-0), styles/globals.css (modified +12/-2)
+⚪ [def5678](https://github.com/x/y/commit/def5678) (@laith) fix login
+  Changed: auth/session.ts (modified +8/-40)
 
 Output:
 ## v1.0.0
@@ -206,10 +241,10 @@ Output:
 ### April 15, 2026
 
 #### 🟢 Features
-- Added a dark mode toggle to the dashboard settings ([abc1234](https://github.com/x/y/commit/abc1234)) (@laith)
+- Added a dark mode toggle component with global stylesheet support ([abc1234](https://github.com/x/y/commit/abc1234)) (@laith)
 
 #### 🔵 Bug Fixes
-- Fixed an infinite redirect loop that occurred when signing out ([def5678](https://github.com/x/y/commit/def5678)) (@laith)`;
+- Fixed a bug in session handling logic ([def5678](https://github.com/x/y/commit/def5678)) (@laith)`;
 }
 
 export async function POST(req: NextRequest) {
@@ -276,13 +311,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const fileResults = await Promise.all(
+    commits.map(c => fetchCommitFiles(owner, repo, c.fullSha, sharedHeaders))
+  );
+  commits = commits.map((c, i) => fileResults[i] ? { ...c, files: fileResults[i] } : c);
+
   const commitUrl = (sha: string) => `https://github.com/${owner}/${repo}/commit/${sha}`;
   const structuredInput = buildStructuredInput(commits, tags, commitUrl);
   const prompt = buildPrompt(owner, repo, structuredInput);
 
   // Try Gemini first, fall back to Groq on any failure
   try {
-    const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const geminiModel = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: { temperature: 0 },
+    });
     const result = await geminiModel.generateContent(prompt);
     return NextResponse.json({ changelog: result.response.text(), model: "gemini" });
   } catch {
@@ -299,7 +342,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [{ role: "user", content: prompt }],
-        temperature: 0.7,
+        temperature: 0,
       }),
     });
 
