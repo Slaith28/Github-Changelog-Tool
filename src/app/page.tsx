@@ -61,7 +61,7 @@ export default async function Home() {
       </div>
 
       <p className="absolute bottom-6 text-xs text-muted-foreground/50">
-        Developed by Laith Shakir
+        Developed by Laith Shakir (@Slaith28)
       </p>
     </main>
   );

@@ -192,6 +192,10 @@ export default function Dashboard() {
           <ChangelogDisplay changelog={changelog} repoUrl={activeRepo} model={changelogModel} />
         )}
       </main>
+
+      <p className="fixed bottom-6 left-1/2 -translate-x-1/2 text-xs text-muted-foreground/50">
+        Developed by Laith Shakir (@Slaith28)
+      </p>
     </div>
   );
 }
