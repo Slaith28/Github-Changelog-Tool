@@ -304,6 +304,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  commits = commits.filter(c => {
+    if (c.author.endsWith("[bot]")) return false;
+    if (/^chore\(deps(-dev)?\):/i.test(c.title)) return false;
+    if (/^bump .+ from .+ to /i.test(c.title)) return false;
+    return true;
+  });
+
   if (commits.length === 0) {
     return NextResponse.json(
       { error: "No commits found for the selected date range" },
