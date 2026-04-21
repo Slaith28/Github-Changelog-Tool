@@ -47,7 +47,6 @@ export default async function Home() {
             <div className="space-y-1 text-xs">
               <p>⚠️ Org repos may not appear without third-party OAuth access from your org.</p>
               <p>⚠️ Currently limited to commits on the default branch (main/master).</p>
-              <p>⚠️ Capped at 50 commits per generation — use the date range filter to target a specific window.</p>
             </div>
           </CardContent>
           <CardFooter>

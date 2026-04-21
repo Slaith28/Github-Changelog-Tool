@@ -130,7 +130,7 @@ export default function Dashboard() {
             <Separator />
             <div className="space-y-1 text-xs">
               <p>⚠️ Org repos may not appear without third-party OAuth access from your org.</p>
-              <p>⚠️ Currently limited to commits on the default branch (main/master).</p>
+              <p>⚠️ Currently limited to 50 commits on the default branch (main/master) — use the date range filter to target a specific window.</p>
               <p>⚠️ This tool runs on free-tier AI API keys. Please be mindful of how often you generate — if you encounter errors, it is likely due to rate limits or quota being exhausted.</p>
             </div>
           </CardContent>
